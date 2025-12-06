@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Liberian Flag Colors */
+  --liberia-red: #BF0A30;
+  --liberia-white: #FFFFFF;
+  --liberia-blue: #002868;
+  --liberia-red-dark: #8B0000;
+  --liberia-blue-dark: #001845;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Custom Liberian colors for Tailwind */
+  --color-liberia-red: var(--liberia-red);
+  --color-liberia-white: var(--liberia-white);
+  --color-liberia-blue: var(--liberia-blue);
+  --color-liberia-red-dark: var(--liberia-red-dark);
+  --color-liberia-blue-dark: var(--liberia-blue-dark);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Utility classes for Liberian colors */
+.bg-liberia-red {
+  background-color: var(--liberia-red);
+}
+
+.bg-liberia-blue {
+  background-color: var(--liberia-blue);
+}
+
+.bg-liberia-red-dark {
+  background-color: var(--liberia-red-dark);
+}
+
+.bg-liberia-blue-dark {
+  background-color: var(--liberia-blue-dark);
+}
+
+.text-liberia-red {
+  color: var(--liberia-red);
+}
+
+.text-liberia-blue {
+  color: var(--liberia-blue);
+}
+
+.border-liberia-red {
+  border-color: var(--liberia-red);
+}
+
+.border-liberia-blue {
+  border-color: var(--liberia-blue);
+}
+
+.hover\:bg-liberia-red-dark:hover {
+  background-color: var(--liberia-red-dark);
+}
+
+.hover\:bg-liberia-blue-dark:hover {
+  background-color: var(--liberia-blue-dark);
+}
