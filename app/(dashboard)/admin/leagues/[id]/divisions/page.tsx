@@ -12,6 +12,7 @@ export default function DivisionsPage() {
   const [divisions, setDivisions] = useState<Division[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingDivision, setEditingDivision] = useState<Division | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -42,14 +43,27 @@ export default function DivisionsPage() {
 
     const { data: divisionsData } = await supabase
       .from('divisions')
-      .select(`
-        *,
-        _count:teams(count)
-      `)
+      .select('*')
       .eq('league_id', leagueId)
       .order('tier', { ascending: true })
 
-    if (divisionsData) setDivisions(divisionsData as Division[])
+    if (divisionsData) {
+      // Fetch team counts for each division
+      const divisionsWithCounts = await Promise.all(
+        divisionsData.map(async (division) => {
+          const { count } = await supabase
+            .from('teams')
+            .select('*', { count: 'exact', head: true })
+            .eq('division_id', division.id)
+
+          return {
+            ...division,
+            team_count: count || 0
+          }
+        })
+      )
+      setDivisions(divisionsWithCounts as Division[])
+    }
     setLoading(false)
   }
 
@@ -63,28 +77,67 @@ export default function DivisionsPage() {
       return
     }
 
-    const { error: insertError } = await supabase
-      .from('divisions')
-      .insert({
-        ...formData,
-        league_id: leagueId
-      })
+    if (editingDivision) {
+      // Update existing division
+      const { error: updateError } = await supabase
+        .from('divisions')
+        .update(formData)
+        .eq('id', editingDivision.id)
 
-    if (insertError) {
-      setError(insertError.message)
+      if (updateError) {
+        setError(updateError.message)
+      } else {
+        setSuccess('Division updated successfully!')
+        setEditingDivision(null)
+        setFormData({
+          name: '',
+          description: '',
+          tier: divisions.length + 1,
+          max_teams: 16,
+          promotion_spots: 2,
+          relegation_spots: 2
+        })
+        setShowForm(false)
+        fetchLeagueAndDivisions()
+      }
     } else {
-      setSuccess('Division created successfully!')
-      setFormData({
-        name: '',
-        description: '',
-        tier: divisions.length + 1,
-        max_teams: 16,
-        promotion_spots: 2,
-        relegation_spots: 2
-      })
-      setShowForm(false)
-      fetchLeagueAndDivisions()
+      // Create new division
+      const { error: insertError } = await supabase
+        .from('divisions')
+        .insert({
+          ...formData,
+          league_id: leagueId
+        })
+
+      if (insertError) {
+        setError(insertError.message)
+      } else {
+        setSuccess('Division created successfully!')
+        setFormData({
+          name: '',
+          description: '',
+          tier: divisions.length + 1,
+          max_teams: 16,
+          promotion_spots: 2,
+          relegation_spots: 2
+        })
+        setShowForm(false)
+        fetchLeagueAndDivisions()
+      }
     }
+  }
+
+  const handleEdit = (division: Division) => {
+    setEditingDivision(division)
+    setFormData({
+      name: division.name,
+      description: division.description || '',
+      tier: division.tier,
+      max_teams: division.max_teams || 16,
+      promotion_spots: division.promotion_spots || 2,
+      relegation_spots: division.relegation_spots || 2
+    })
+    setShowForm(true)
   }
 
   const deleteDivision = async (divisionId: string) => {
@@ -135,7 +188,20 @@ export default function DivisionsPage() {
 
         <div className="mb-6">
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              setShowForm(!showForm)
+              if (showForm) {
+                setEditingDivision(null)
+                setFormData({
+                  name: '',
+                  description: '',
+                  tier: divisions.length + 1,
+                  max_teams: 16,
+                  promotion_spots: 2,
+                  relegation_spots: 2
+                })
+              }
+            }}
             className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-6 rounded"
           >
             {showForm ? 'Cancel' : '+ Create New Division'}
@@ -144,7 +210,7 @@ export default function DivisionsPage() {
 
         {showForm && (
           <div className="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 className="text-2xl font-bold mb-4">Create New Division</h2>
+            <h2 className="text-2xl font-bold mb-4">{editingDivision ? 'Edit Division' : 'Create New Division'}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -237,11 +303,22 @@ export default function DivisionsPage() {
                   type="submit"
                   className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-6 rounded"
                 >
-                  Create Division
+                  {editingDivision ? 'Update Division' : 'Create Division'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false)
+                    setEditingDivision(null)
+                    setFormData({
+                      name: '',
+                      description: '',
+                      tier: divisions.length + 1,
+                      max_teams: 16,
+                      promotion_spots: 2,
+                      relegation_spots: 2
+                    })
+                  }}
                   className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded"
                 >
                   Cancel
@@ -292,12 +369,18 @@ export default function DivisionsPage() {
                         <div>
                           <span className="text-gray-500">Current Teams:</span>
                           <span className="ml-2 font-medium">
-                            {(division as any)._count?.teams || 0}
+                            {(division as any).team_count || 0}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleEdit(division)}
+                        className="text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Edit
+                      </button>
                       <button
                         onClick={() => router.push(`/admin/divisions/${division.id}/teams`)}
                         className="text-liberia-red hover:text-liberia-red-dark font-medium"
@@ -306,7 +389,7 @@ export default function DivisionsPage() {
                       </button>
                       <button
                         onClick={() => deleteDivision(division.id)}
-                        className="text-red-600 hover:text-red-800 font-medium ml-4"
+                        className="text-red-600 hover:text-red-800 font-medium"
                       >
                         Delete
                       </button>
