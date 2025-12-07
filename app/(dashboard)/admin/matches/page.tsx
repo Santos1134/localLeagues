@@ -198,6 +198,42 @@ export default function MatchesManagementPage() {
     }
   }
 
+  const deleteMatch = async (matchId: string) => {
+    if (!confirm('Are you sure you want to delete this match?')) return
+
+    const { error } = await supabase
+      .from('matches')
+      .delete()
+      .eq('id', matchId)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess('Match deleted successfully')
+      fetchTeamsAndMatches()
+    }
+  }
+
+  const deleteAllMatches = async () => {
+    if (!selectedDivision) {
+      setError('Please select a division first')
+      return
+    }
+
+    if (!confirm('Are you sure you want to DELETE ALL matches in this division? This action cannot be undone!')) return
+
+    const { error } = await supabase
+      .from('matches')
+      .delete()
+      .eq('division_id', selectedDivision)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess('All matches deleted successfully')
+      fetchTeamsAndMatches()
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -241,7 +277,7 @@ export default function MatchesManagementPage() {
 
         {selectedDivision && (
           <>
-            <div className="mb-6 flex gap-4">
+            <div className="mb-6 flex gap-4 flex-wrap">
               <button
                 onClick={() => setShowForm(!showForm)}
                 className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-6 rounded"
@@ -254,6 +290,14 @@ export default function MatchesManagementPage() {
               >
                 {showFixtureGenerator ? 'Cancel' : 'Generate Full Fixtures'}
               </button>
+              {matches.length > 0 && (
+                <button
+                  onClick={deleteAllMatches}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded"
+                >
+                  Delete All Matches
+                </button>
+              )}
             </div>
 
             {showFixtureGenerator && (
@@ -473,9 +517,15 @@ export default function MatchesManagementPage() {
                           <td className="px-6 py-4 text-sm">
                             <button
                               onClick={() => router.push(`/admin/matches/${match.id}`)}
-                              className="text-liberia-red hover:text-liberia-red-dark"
+                              className="text-liberia-red hover:text-liberia-red-dark mr-4"
                             >
                               Manage
+                            </button>
+                            <button
+                              onClick={() => deleteMatch(match.id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              Delete
                             </button>
                           </td>
                         </tr>
