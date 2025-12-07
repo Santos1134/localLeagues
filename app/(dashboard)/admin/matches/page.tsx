@@ -198,21 +198,6 @@ export default function MatchesManagementPage() {
     }
   }
 
-  const deleteMatch = async (matchId: string) => {
-    if (!confirm('Are you sure you want to delete this match?')) return
-
-    const { error } = await supabase
-      .from('matches')
-      .delete()
-      .eq('id', matchId)
-
-    if (error) {
-      setError(error.message)
-    } else {
-      setSuccess('Match deleted successfully')
-      fetchTeamsAndMatches()
-    }
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -488,15 +473,9 @@ export default function MatchesManagementPage() {
                           <td className="px-6 py-4 text-sm">
                             <button
                               onClick={() => router.push(`/admin/matches/${match.id}`)}
-                              className="text-liberia-red hover:text-liberia-red-dark mr-4"
+                              className="text-liberia-red hover:text-liberia-red-dark"
                             >
                               Manage
-                            </button>
-                            <button
-                              onClick={() => deleteMatch(match.id)}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              Delete
                             </button>
                           </td>
                         </tr>
