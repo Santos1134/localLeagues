@@ -1,7 +1,25 @@
 import Link from 'next/link'
 import AnnouncementsFeed from '@/components/AnnouncementsFeed'
+import { createClient } from '@/lib/supabase/server'
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient()
+
+  // Fetch real stats from database
+  const [leaguesResult, divisionsResult, teamsResult, playersResult] = await Promise.all([
+    supabase.from('leagues').select('id', { count: 'exact', head: true }),
+    supabase.from('divisions').select('id', { count: 'exact', head: true }),
+    supabase.from('teams').select('id', { count: 'exact', head: true }),
+    supabase.from('players').select('id', { count: 'exact', head: true }),
+  ])
+
+  const stats = {
+    leagues: leaguesResult.count || 0,
+    divisions: divisionsResult.count || 0,
+    teams: teamsResult.count || 0,
+    players: playersResult.count || 0,
+  }
+
   return (
     <div className="bg-gray-50">
       <section className="bg-gradient-to-r from-liberia-blue to-liberia-blue-dark text-white py-20">
@@ -35,19 +53,19 @@ export default function Home() {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 text-center">
             <div className="p-6">
-              <div className="text-4xl font-bold text-liberia-blue mb-2">5</div>
+              <div className="text-4xl font-bold text-liberia-blue mb-2">{stats.leagues}</div>
               <div className="text-gray-600">Active Leagues</div>
             </div>
             <div className="p-6">
-              <div className="text-4xl font-bold text-liberia-blue mb-2">12</div>
+              <div className="text-4xl font-bold text-liberia-blue mb-2">{stats.divisions}</div>
               <div className="text-gray-600">Divisions</div>
             </div>
             <div className="p-6">
-              <div className="text-4xl font-bold text-liberia-blue mb-2">150+</div>
+              <div className="text-4xl font-bold text-liberia-blue mb-2">{stats.teams}</div>
               <div className="text-gray-600">Teams</div>
             </div>
             <div className="p-6">
-              <div className="text-4xl font-bold text-liberia-blue mb-2">2000+</div>
+              <div className="text-4xl font-bold text-liberia-blue mb-2">{stats.players}</div>
               <div className="text-gray-600">Players</div>
             </div>
           </div>
@@ -97,16 +115,24 @@ export default function Home() {
 
       <section className="bg-liberia-blue text-white py-16">
         <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
+          <h2 className="text-3xl font-bold mb-4">Stay Updated</h2>
           <p className="text-xl mb-8 text-blue-100">
-            Join thousands of football fans following Liberian football
+            Follow all the latest matches, standings, and player statistics
           </p>
-          <Link
-            href="/login"
-            className="bg-yellow-500 text-liberia-blue-dark px-8 py-4 rounded-lg font-bold text-lg hover:bg-yellow-400 transition inline-block"
-          >
-            Sign Up Now
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/fixtures"
+              className="bg-yellow-500 text-liberia-blue-dark px-8 py-4 rounded-lg font-bold text-lg hover:bg-yellow-400 transition inline-block"
+            >
+              View Fixtures
+            </Link>
+            <Link
+              href="/standings"
+              className="bg-white text-liberia-blue-dark px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-100 transition inline-block"
+            >
+              View Standings
+            </Link>
+          </div>
         </div>
       </section>
     </div>
