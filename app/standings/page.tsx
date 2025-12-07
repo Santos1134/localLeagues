@@ -137,7 +137,7 @@ export default async function StandingsPage() {
                               key={team.team_id}
                               className={`hover:bg-gray-50 ${
                                 isPromotion
-                                  ? 'border-l-4 border-liberia-red'
+                                  ? 'border-l-4 border-green-500'
                                   : isRelegation
                                   ? 'border-l-4 border-red-500'
                                   : 'border-l-4 border-transparent'
