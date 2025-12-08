@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import LogoutButton from '@/components/admin/LogoutButton'
 
 interface Cup {
   id: string
@@ -283,12 +284,15 @@ export default function CupDetailsPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-liberia-blue to-liberia-blue-dark text-white py-8">
         <div className="container mx-auto px-4">
-          <button
-            onClick={() => router.push('/admin/cups')}
-            className="text-blue-100 hover:text-white mb-4 flex items-center"
-          >
-            ← Back to Cups
-          </button>
+          <div className="flex justify-between items-start mb-4">
+            <button
+              onClick={() => router.push('/admin/cups')}
+              className="text-blue-100 hover:text-white flex items-center"
+            >
+              ← Back to Cups
+            </button>
+            <LogoutButton />
+          </div>
           <h1 className="text-3xl font-bold mb-2">{cup.name}</h1>
           <p className="text-blue-100">
             {cup.season && `${cup.season} • `}
