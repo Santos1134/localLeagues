@@ -100,6 +100,9 @@ export default function CupsManagementPage() {
       return
     }
 
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+
     const cupData = {
       name: formData.name.trim(),
       description: formData.description.trim() || null,
@@ -108,7 +111,8 @@ export default function CupsManagementPage() {
       total_teams: formData.total_teams,
       teams_per_group: formData.teams_per_group,
       start_date: formData.start_date || null,
-      end_date: formData.end_date || null
+      end_date: formData.end_date || null,
+      created_by: user?.id || null
     }
 
     if (editingCup) {
