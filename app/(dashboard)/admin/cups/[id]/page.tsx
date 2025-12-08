@@ -75,20 +75,14 @@ export default function CupDetailsPage() {
     if (cupData) {
       setCup(cupData)
 
-      // Fetch available teams from the cup's league
+      // Fetch available teams from ALL divisions (cups are independent)
       const { data: teamsData } = await supabase
         .from('teams')
-        .select(`
-          id,
-          name,
-          division_id,
-          division:divisions!inner(league_id)
-        `)
-        .eq('division.league_id', cupData.league_id)
+        .select('id, name, division_id')
         .order('name')
 
       if (teamsData) {
-        setAvailableTeams(teamsData as any)
+        setAvailableTeams(teamsData)
       }
 
       // Fetch cup teams

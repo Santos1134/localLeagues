@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import LogoutButton from '@/components/admin/LogoutButton'
 
 interface Cup {
   id: string
@@ -210,8 +211,13 @@ export default function CupsManagementPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-liberia-blue to-liberia-blue-dark text-white py-8">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-2">Cup Competitions</h1>
-          <p className="text-blue-100">Create and manage tournament cups with group stages</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Cup Competitions</h1>
+              <p className="text-blue-100">Create and manage tournament cups with group stages</p>
+            </div>
+            <LogoutButton />
+          </div>
         </div>
       </div>
 

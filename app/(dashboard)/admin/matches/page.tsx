@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import type { DivisionWithLeague, Team, Match, Profile } from '@/lib/types/database.types'
+import LogoutButton from '@/components/admin/LogoutButton'
 
 export default function MatchesManagementPage() {
   const [divisions, setDivisions] = useState<DivisionWithLeague[]>([])
@@ -239,8 +240,13 @@ export default function MatchesManagementPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-gradient-to-r from-liberia-blue to-liberia-blue-dark text-white py-8">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-2">Match Management</h1>
-          <p className="text-blue-100">Schedule and manage fixtures</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Match Management</h1>
+              <p className="text-blue-100">Schedule and manage fixtures</p>
+            </div>
+            <LogoutButton />
+          </div>
         </div>
       </div>
 

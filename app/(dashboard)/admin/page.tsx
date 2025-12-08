@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import LogoutButton from '@/components/admin/LogoutButton'
 
 export default async function AdminDashboard() {
   const supabase = await createClient()
@@ -46,8 +47,13 @@ export default async function AdminDashboard() {
       {/* Header with Liberian Colors */}
       <div className="bg-gradient-to-r from-liberia-blue to-liberia-blue-dark text-white shadow-lg border-b-4 border-liberia-red">
         <div className="container mx-auto px-4 py-8">
-          <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
-          <p className="text-blue-100">Manage your league system</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
+              <p className="text-blue-100">Manage your league system</p>
+            </div>
+            <LogoutButton />
+          </div>
         </div>
       </div>
 
