@@ -566,6 +566,111 @@ export default function CupDetailsPage() {
     }
   }
 
+  const recalculateStandings = async (groupId?: string) => {
+    try {
+      // Get all completed matches for this cup (or specific group)
+      let query = supabase
+        .from('cup_matches')
+        .select('*')
+        .eq('cup_id', cupId)
+        .eq('status', 'completed')
+
+      if (groupId) {
+        query = query.eq('group_id', groupId)
+      }
+
+      const { data: completedMatches } = await query
+
+      if (!completedMatches || completedMatches.length === 0) return
+
+      // Get all teams in this cup
+      const { data: teamsData } = await supabase
+        .from('cup_teams')
+        .select('id, cup_team_id, group_id')
+        .eq('cup_id', cupId)
+
+      if (!teamsData) return
+
+      // Calculate stats for each team
+      const teamStats: Record<string, any> = {}
+
+      teamsData.forEach(team => {
+        teamStats[team.cup_team_id] = {
+          id: team.id,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goals_for: 0,
+          goals_against: 0,
+          goal_difference: 0,
+          points: 0
+        }
+      })
+
+      // Process each completed match
+      completedMatches.forEach(match => {
+        const homeTeamId = match.home_cup_team_id
+        const awayTeamId = match.away_cup_team_id
+        const homeScore = match.home_score || 0
+        const awayScore = match.away_score || 0
+
+        if (teamStats[homeTeamId]) {
+          teamStats[homeTeamId].played++
+          teamStats[homeTeamId].goals_for += homeScore
+          teamStats[homeTeamId].goals_against += awayScore
+
+          if (homeScore > awayScore) {
+            teamStats[homeTeamId].won++
+            teamStats[homeTeamId].points += 3
+          } else if (homeScore === awayScore) {
+            teamStats[homeTeamId].drawn++
+            teamStats[homeTeamId].points += 1
+          } else {
+            teamStats[homeTeamId].lost++
+          }
+        }
+
+        if (teamStats[awayTeamId]) {
+          teamStats[awayTeamId].played++
+          teamStats[awayTeamId].goals_for += awayScore
+          teamStats[awayTeamId].goals_against += homeScore
+
+          if (awayScore > homeScore) {
+            teamStats[awayTeamId].won++
+            teamStats[awayTeamId].points += 3
+          } else if (awayScore === homeScore) {
+            teamStats[awayTeamId].drawn++
+            teamStats[awayTeamId].points += 1
+          } else {
+            teamStats[awayTeamId].lost++
+          }
+        }
+      })
+
+      // Update each team's stats in the database
+      for (const [teamId, stats] of Object.entries(teamStats)) {
+        stats.goal_difference = stats.goals_for - stats.goals_against
+
+        await supabase
+          .from('cup_teams')
+          .update({
+            played: stats.played,
+            won: stats.won,
+            drawn: stats.drawn,
+            lost: stats.lost,
+            goals_for: stats.goals_for,
+            goals_against: stats.goals_against,
+            goal_difference: stats.goal_difference,
+            points: stats.points
+          })
+          .eq('id', stats.id)
+      }
+    } catch (err: any) {
+      console.error('Failed to recalculate standings:', err)
+    }
+  }
+
   const updateMatch = async () => {
     if (!editMatchForm) return
 
@@ -592,7 +697,12 @@ export default function CupDetailsPage() {
         return
       }
 
-      setSuccess('Match updated successfully!')
+      // Recalculate standings if match is completed
+      if (editMatchForm.status === 'completed') {
+        await recalculateStandings()
+      }
+
+      setSuccess('Match updated successfully! Standings recalculated.')
       setEditingMatchId(null)
       setEditMatchForm(null)
       fetchCupData()
@@ -1540,7 +1650,19 @@ export default function CupDetailsPage() {
         {/* Standings Tab */}
         {activeTab === 'standings' && (
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-6">Group Standings</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Group Standings</h2>
+              <button
+                onClick={async () => {
+                  await recalculateStandings()
+                  setSuccess('Standings recalculated successfully!')
+                  fetchCupData()
+                }}
+                className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-4 rounded-lg transition"
+              >
+                🔄 Recalculate Standings
+              </button>
+            </div>
 
             {groups.length === 0 ? (
               <div className="text-center text-gray-500 py-12">
