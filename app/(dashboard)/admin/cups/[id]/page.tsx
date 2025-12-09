@@ -117,6 +117,16 @@ export default function CupDetailsPage() {
   const [cupPlayers, setCupPlayers] = useState<CupPlayer[]>([])
   const [showAddPlayers, setShowAddPlayers] = useState(false)
 
+  // Fixture management
+  const [showAddFixture, setShowAddFixture] = useState(false)
+  const [newFixtureForm, setNewFixtureForm] = useState({
+    home_team_id: '',
+    away_team_id: '',
+    group_id: '',
+    match_date: '',
+    venue: ''
+  })
+
   useEffect(() => {
     fetchCupData()
   }, [cupId])
@@ -455,36 +465,103 @@ export default function CupDetailsPage() {
 
     if (!confirm('Generate fixtures for group stage? This will create round-robin matches for each group.')) return
 
-    // Delete existing group stage matches
-    await supabase
-      .from('cup_matches')
-      .delete()
-      .eq('cup_id', cupId)
-      .eq('stage', 'group')
+    try {
+      // Delete existing group stage matches
+      const { error: deleteError } = await supabase
+        .from('cup_matches')
+        .delete()
+        .eq('cup_id', cupId)
+        .eq('stage', 'group')
 
-    // Generate round-robin fixtures for each group
-    for (const group of groups) {
-      const teams = group.teams
+      if (deleteError) {
+        console.error('Delete error:', deleteError)
+        setError(`Failed to delete existing fixtures: ${deleteError.message}`)
+        return
+      }
 
-      // Round-robin algorithm
-      for (let i = 0; i < teams.length; i++) {
-        for (let j = i + 1; j < teams.length; j++) {
-          await supabase
-            .from('cup_matches')
-            .insert({
-              cup_id: cupId,
-              group_id: group.id,
-              home_cup_team_id: teams[i].id,
-              away_cup_team_id: teams[j].id,
-              stage: 'group',
-              status: 'scheduled'
-            })
+      // Generate round-robin fixtures for each group
+      for (const group of groups) {
+        const teams = group.teams
+
+        if (teams.length < 2) {
+          console.warn(`Group ${group.group_name} has less than 2 teams, skipping`)
+          continue
+        }
+
+        // Round-robin algorithm
+        for (let i = 0; i < teams.length; i++) {
+          for (let j = i + 1; j < teams.length; j++) {
+            const { error: insertError } = await supabase
+              .from('cup_matches')
+              .insert({
+                cup_id: cupId,
+                group_id: group.id,
+                home_cup_team_id: teams[i].id,
+                away_cup_team_id: teams[j].id,
+                stage: 'group',
+                status: 'scheduled'
+              })
+
+            if (insertError) {
+              console.error('Insert error:', insertError)
+              setError(`Failed to create fixture: ${insertError.message}`)
+              return
+            }
+          }
         }
       }
+
+      setSuccess('Group stage fixtures generated successfully!')
+      fetchCupData()
+    } catch (err: any) {
+      console.error('Generation error:', err)
+      setError(`Failed to generate fixtures: ${err.message}`)
+    }
+  }
+
+  const createManualFixture = async () => {
+    if (!newFixtureForm.home_team_id || !newFixtureForm.away_team_id) {
+      setError('Please select both home and away teams')
+      return
     }
 
-    setSuccess('Group stage fixtures generated successfully!')
-    fetchCupData()
+    if (newFixtureForm.home_team_id === newFixtureForm.away_team_id) {
+      setError('Home and away teams must be different')
+      return
+    }
+
+    try {
+      const { error: insertError } = await supabase
+        .from('cup_matches')
+        .insert({
+          cup_id: cupId,
+          group_id: newFixtureForm.group_id || null,
+          home_cup_team_id: newFixtureForm.home_team_id,
+          away_cup_team_id: newFixtureForm.away_team_id,
+          match_date: newFixtureForm.match_date || null,
+          venue: newFixtureForm.venue || null,
+          stage: newFixtureForm.group_id ? 'group' : 'round_of_16',
+          status: 'scheduled'
+        })
+
+      if (insertError) {
+        setError(`Failed to create fixture: ${insertError.message}`)
+        return
+      }
+
+      setSuccess('Fixture created successfully!')
+      setNewFixtureForm({
+        home_team_id: '',
+        away_team_id: '',
+        group_id: '',
+        match_date: '',
+        venue: ''
+      })
+      setShowAddFixture(false)
+      fetchCupData()
+    } catch (err: any) {
+      setError(`Failed to create fixture: ${err.message}`)
+    }
   }
 
   const updateCupStatus = async (newStatus: Cup['status']) => {
@@ -1108,25 +1185,139 @@ export default function CupDetailsPage() {
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">Group Stage Fixtures</h2>
-              {groups.length > 0 && matches.filter(m => m.stage === 'group').length === 0 && (
+              <div className="flex gap-2">
                 <button
-                  onClick={generateGroupFixtures}
-                  className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-4 rounded-lg transition"
+                  onClick={() => setShowAddFixture(!showAddFixture)}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
                 >
-                  Generate Fixtures
+                  {showAddFixture ? 'Cancel' : '+ Add Fixture'}
                 </button>
-              )}
+                {groups.length > 0 && matches.filter(m => m.stage === 'group').length === 0 && (
+                  <button
+                    onClick={generateGroupFixtures}
+                    className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-4 rounded-lg transition"
+                  >
+                    🎲 Auto-Generate
+                  </button>
+                )}
+              </div>
             </div>
 
-            {matches.filter(m => m.stage === 'group').length === 0 ? (
-              <div className="text-center text-gray-500 py-12">
-                <p className="text-lg mb-4">No fixtures generated yet</p>
-                <p className="text-sm">Generate groups first, then create fixtures</p>
+            {/* Manual Fixture Creation Form */}
+            {showAddFixture && (
+              <div className="bg-blue-50 p-6 rounded-lg mb-6">
+                <h3 className="text-lg font-bold mb-4">Create New Fixture</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Home Team *
+                    </label>
+                    <select
+                      value={newFixtureForm.home_team_id}
+                      onChange={(e) => setNewFixtureForm({...newFixtureForm, home_team_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue"
+                    >
+                      <option value="">Select home team</option>
+                      {cupTeams.map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Away Team *
+                    </label>
+                    <select
+                      value={newFixtureForm.away_team_id}
+                      onChange={(e) => setNewFixtureForm({...newFixtureForm, away_team_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue"
+                    >
+                      <option value="">Select away team</option>
+                      {cupTeams.map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Group (Optional)
+                    </label>
+                    <select
+                      value={newFixtureForm.group_id}
+                      onChange={(e) => setNewFixtureForm({...newFixtureForm, group_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue"
+                    >
+                      <option value="">No group (Knockout)</option>
+                      {groups.map(group => (
+                        <option key={group.id} value={group.id}>{group.group_name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Match Date (Optional)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={newFixtureForm.match_date}
+                      onChange={(e) => setNewFixtureForm({...newFixtureForm, match_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Venue (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={newFixtureForm.venue}
+                      onChange={(e) => setNewFixtureForm({...newFixtureForm, venue: e.target.value})}
+                      placeholder="e.g., Samuel Kanyon Doe Sports Complex"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={createManualFixture}
+                    className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-6 rounded-lg transition"
+                  >
+                    Create Fixture
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddFixture(false)
+                      setNewFixtureForm({
+                        home_team_id: '',
+                        away_team_id: '',
+                        group_id: '',
+                        match_date: '',
+                        venue: ''
+                      })
+                    }}
+                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            ) : (
+            )}
+
+            {matches.filter(m => m.stage === 'group').length === 0 && !showAddFixture ? (
+              <div className="text-center text-gray-500 py-12">
+                <p className="text-lg mb-4">No fixtures created yet</p>
+                <p className="text-sm">Use "+ Add Fixture" to create manually or "🎲 Auto-Generate" for round-robin matches</p>
+              </div>
+            ) : matches.filter(m => m.stage === 'group').length > 0 && (
               <div className="space-y-6">
                 {groups.map(group => {
                   const groupMatches = matches.filter(m => m.group_id === group.id)
+                  if (groupMatches.length === 0) return null
                   return (
                     <div key={group.id}>
                       <h3 className="text-xl font-bold mb-3 text-liberia-blue">{group.group_name}</h3>
