@@ -95,6 +95,7 @@ export default function CupDetailsPage() {
 
   // Team management
   const [showAddTeam, setShowAddTeam] = useState(false)
+  const [editingTeam, setEditingTeam] = useState<string | null>(null)
   const [newTeamForm, setNewTeamForm] = useState({
     name: '',
     short_name: '',
@@ -103,6 +104,7 @@ export default function CupDetailsPage() {
     city: '',
     coach: ''
   })
+  const [editTeamForm, setEditTeamForm] = useState<CupTeam | null>(null)
 
   // Player management
   const [selectedTeamForPlayers, setSelectedTeamForPlayers] = useState('')
@@ -279,6 +281,34 @@ export default function CupDetailsPage() {
         coach: ''
       })
       setShowAddTeam(false)
+      fetchCupData()
+    }
+  }
+
+  const updateTeam = async () => {
+    if (!editTeamForm || !editTeamForm.name.trim()) {
+      setError('Please enter a team name')
+      return
+    }
+
+    const { error: updateError } = await supabase
+      .from('cup_teams_registry')
+      .update({
+        name: editTeamForm.name.trim(),
+        short_name: editTeamForm.short_name?.trim() || null,
+        logo_url: editTeamForm.logo_url?.trim() || null,
+        stadium: editTeamForm.stadium?.trim() || null,
+        city: editTeamForm.city?.trim() || null,
+        coach: editTeamForm.coach?.trim() || null
+      })
+      .eq('id', editTeamForm.id)
+
+    if (updateError) {
+      setError(updateError.message)
+    } else {
+      setSuccess(`Team "${editTeamForm.name}" updated successfully`)
+      setEditingTeam(null)
+      setEditTeamForm(null)
       fetchCupData()
     }
   }
@@ -696,22 +726,150 @@ export default function CupDetailsPage() {
 
               <div className="space-y-3">
                 {cupTeams.map((team) => (
-                  <div
-                    key={team.cup_team_id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div>
-                      <div className="font-semibold">{team.name}</div>
-                      {team.group_name && (
-                        <div className="text-sm text-gray-600">{team.group_name}</div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => removeTeamFromCup(team.cup_team_id, team.name)}
-                      className="text-red-600 hover:text-red-800 font-medium"
-                    >
-                      Remove
-                    </button>
+                  <div key={team.cup_team_id}>
+                    {editingTeam === team.id ? (
+                      // Edit Mode
+                      <div className="bg-blue-50 p-6 rounded-lg border-2 border-liberia-blue">
+                        <h3 className="font-semibold mb-4 text-lg">Edit Team Information</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Team Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={editTeamForm?.name || ''}
+                              onChange={(e) => setEditTeamForm(editTeamForm ? {...editTeamForm, name: e.target.value} : null)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Short Name
+                            </label>
+                            <input
+                              type="text"
+                              value={editTeamForm?.short_name || ''}
+                              onChange={(e) => setEditTeamForm(editTeamForm ? {...editTeamForm, short_name: e.target.value} : null)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Stadium
+                            </label>
+                            <input
+                              type="text"
+                              value={editTeamForm?.stadium || ''}
+                              onChange={(e) => setEditTeamForm(editTeamForm ? {...editTeamForm, stadium: e.target.value} : null)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              City
+                            </label>
+                            <input
+                              type="text"
+                              value={editTeamForm?.city || ''}
+                              onChange={(e) => setEditTeamForm(editTeamForm ? {...editTeamForm, city: e.target.value} : null)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Coach
+                            </label>
+                            <input
+                              type="text"
+                              value={editTeamForm?.coach || ''}
+                              onChange={(e) => setEditTeamForm(editTeamForm ? {...editTeamForm, coach: e.target.value} : null)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Logo URL
+                            </label>
+                            <input
+                              type="url"
+                              value={editTeamForm?.logo_url || ''}
+                              onChange={(e) => setEditTeamForm(editTeamForm ? {...editTeamForm, logo_url: e.target.value} : null)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-3 mt-4">
+                          <button
+                            onClick={updateTeam}
+                            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition"
+                          >
+                            Save Changes
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingTeam(null)
+                              setEditTeamForm(null)
+                            }}
+                            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // View Mode
+                      <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center gap-4 flex-1">
+                          {/* Team Logo */}
+                          {team.logo_url ? (
+                            <img
+                              src={team.logo_url}
+                              alt={team.name}
+                              className="w-12 h-12 object-contain rounded"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none'
+                              }}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center text-gray-500 font-bold text-lg">
+                              {team.name.substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
+
+                          {/* Team Info */}
+                          <div className="flex-1">
+                            <div className="font-semibold text-lg">{team.name}</div>
+                            <div className="text-sm text-gray-600 space-y-0.5">
+                              {team.short_name && <div>Short: {team.short_name}</div>}
+                              {team.stadium && <div>🏟️ {team.stadium}</div>}
+                              {team.city && <div>📍 {team.city}</div>}
+                              {team.coach && <div>👤 Coach: {team.coach}</div>}
+                              {team.group_name && <div className="font-medium text-liberia-blue mt-1">{team.group_name}</div>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingTeam(team.id)
+                              setEditTeamForm(team)
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => removeTeamFromCup(team.cup_team_id, team.name)}
+                            className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
