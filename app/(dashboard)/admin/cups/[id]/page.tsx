@@ -209,8 +209,8 @@ export default function CupDetailsPage() {
         .from('cup_matches')
         .select(`
           *,
-          home_team:teams!cup_matches_home_team_id_fkey(id, name),
-          away_team:teams!cup_matches_away_team_id_fkey(id, name),
+          home_team:cup_teams_registry!cup_matches_home_cup_team_id_fkey(id, name),
+          away_team:cup_teams_registry!cup_matches_away_cup_team_id_fkey(id, name),
           cup_groups(group_name)
         `)
         .eq('cup_id', cupId)
@@ -219,10 +219,10 @@ export default function CupDetailsPage() {
       if (matchesData) {
         const formattedMatches = matchesData.map((m: any) => ({
           id: m.id,
-          home_team_id: m.home_team_id,
-          away_team_id: m.away_team_id,
-          home_team_name: m.home_team.name,
-          away_team_name: m.away_team.name,
+          home_team_id: m.home_cup_team_id,
+          away_team_id: m.away_cup_team_id,
+          home_team_name: m.home_team?.name || 'TBD',
+          away_team_name: m.away_team?.name || 'TBD',
           match_date: m.match_date,
           venue: m.venue,
           home_score: m.home_score,
@@ -474,8 +474,8 @@ export default function CupDetailsPage() {
             .insert({
               cup_id: cupId,
               group_id: group.id,
-              home_team_id: teams[i].id,
-              away_team_id: teams[j].id,
+              home_cup_team_id: teams[i].id,
+              away_cup_team_id: teams[j].id,
               stage: 'group',
               status: 'scheduled'
             })
