@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import AnnouncementsFeed from '@/components/AnnouncementsFeed'
-import LiveScore from '@/components/LiveScore'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function Home() {
@@ -43,7 +42,7 @@ export default async function Home() {
                 href="/fixtures"
                 className="bg-white text-liberia-blue-dark px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-100 transition"
               >
-                View Fixtures
+                Fixtures & Scores
               </Link>
             </div>
           </div>
@@ -70,19 +69,6 @@ export default async function Home() {
               <div className="text-gray-600">Players</div>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Live Scores Section */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <LiveScore
-            autoRefresh={true}
-            refreshInterval={30000}
-            showUpcoming={true}
-            showRecent={true}
-            limit={10}
-          />
         </div>
       </section>
 
@@ -117,10 +103,10 @@ export default async function Home() {
             <div className="bg-white p-6 rounded-lg shadow-lg">
               <div className="text-4xl mb-4">📅</div>
               <h3 className="text-xl font-bold mb-3 text-gray-800">
-                Match Fixtures
+                Fixtures & Live Scores
               </h3>
               <p className="text-gray-600">
-                Complete fixture schedules for all divisions.
+                Complete fixture schedules, live matches, and results for all divisions.
               </p>
             </div>
           </div>
