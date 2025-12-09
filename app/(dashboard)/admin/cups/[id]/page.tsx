@@ -106,6 +106,11 @@ export default function CupDetailsPage() {
   })
   const [editTeamForm, setEditTeamForm] = useState<CupTeam | null>(null)
 
+  // Group management
+  const [showManualGrouping, setShowManualGrouping] = useState(false)
+  const [manualGroupName, setManualGroupName] = useState('')
+  const [selectedTeamsForGroup, setSelectedTeamsForGroup] = useState<string[]>([])
+
   // Player management
   const [selectedTeamForPlayers, setSelectedTeamForPlayers] = useState('')
   const [teamPlayers, setTeamPlayers] = useState<Player[]>([])
@@ -335,7 +340,7 @@ export default function CupDetailsPage() {
       return
     }
 
-    if (!confirm('Generate groups? This will randomly assign teams to groups.')) return
+    if (!confirm('Auto-generate groups? This will randomly assign teams to groups.')) return
 
     // Delete existing groups
     await supabase.from('cup_groups').delete().eq('cup_id', cupId)
@@ -373,8 +378,73 @@ export default function CupDetailsPage() {
         .eq('id', shuffled[i].cup_team_id)
     }
 
-    setSuccess('Groups generated successfully!')
+    setSuccess('Groups auto-generated successfully!')
     fetchCupData()
+  }
+
+  const createManualGroup = async () => {
+    if (!manualGroupName.trim()) {
+      setError('Please enter a group name')
+      return
+    }
+
+    if (selectedTeamsForGroup.length === 0) {
+      setError('Please select at least one team for the group')
+      return
+    }
+
+    // Create the group
+    const { data: newGroup, error: groupError } = await supabase
+      .from('cup_groups')
+      .insert({
+        cup_id: cupId,
+        group_name: manualGroupName.trim(),
+        group_order: groups.length + 1
+      })
+      .select()
+      .single()
+
+    if (groupError) {
+      setError(groupError.message)
+      return
+    }
+
+    // Assign selected teams to the group
+    for (const teamId of selectedTeamsForGroup) {
+      await supabase
+        .from('cup_teams')
+        .update({ group_id: newGroup.id })
+        .eq('id', teamId)
+    }
+
+    setSuccess(`Group "${manualGroupName}" created with ${selectedTeamsForGroup.length} teams!`)
+    setManualGroupName('')
+    setSelectedTeamsForGroup([])
+    setShowManualGrouping(false)
+    fetchCupData()
+  }
+
+  const deleteGroup = async (groupId: string, groupName: string) => {
+    if (!confirm(`Delete ${groupName}? Teams will be unassigned from this group.`)) return
+
+    // Unassign teams from group
+    await supabase
+      .from('cup_teams')
+      .update({ group_id: null })
+      .eq('group_id', groupId)
+
+    // Delete group
+    const { error } = await supabase
+      .from('cup_groups')
+      .delete()
+      .eq('id', groupId)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess('Group deleted successfully')
+      fetchCupData()
+    }
   }
 
   const generateGroupFixtures = async () => {
@@ -896,37 +966,139 @@ export default function CupDetailsPage() {
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Cup Groups</h2>
-                {cupTeams.length === cup.total_teams && groups.length === 0 && (
-                  <button
-                    onClick={generateGroups}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
-                  >
-                    Generate Groups
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {cupTeams.length >= cup.teams_per_group && (
+                    <>
+                      <button
+                        onClick={() => setShowManualGrouping(!showManualGrouping)}
+                        className="bg-liberia-blue hover:bg-liberia-blue-dark text-white font-bold py-2 px-4 rounded-lg transition"
+                      >
+                        {showManualGrouping ? 'Cancel' : '+ Manual Group'}
+                      </button>
+                      {groups.length === 0 && cupTeams.length === cup.total_teams && (
+                        <button
+                          onClick={generateGroups}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
+                        >
+                          🎲 Auto-Generate
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
-              {groups.length === 0 ? (
+              {/* Manual Group Creation Form */}
+              {showManualGrouping && (
+                <div className="bg-blue-50 p-6 rounded-lg mb-6">
+                  <h3 className="font-semibold mb-4 text-lg">Create Group Manually</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Group Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={manualGroupName}
+                        onChange={(e) => setManualGroupName(e.target.value)}
+                        placeholder="e.g., Group A, Pool 1, etc."
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select Teams <span className="text-red-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                        {cupTeams.filter(t => !t.group_id).map(team => (
+                          <label key={team.cup_team_id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                            <input
+                              type="checkbox"
+                              checked={selectedTeamsForGroup.includes(team.cup_team_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedTeamsForGroup([...selectedTeamsForGroup, team.cup_team_id])
+                                } else {
+                                  setSelectedTeamsForGroup(selectedTeamsForGroup.filter(id => id !== team.cup_team_id))
+                                }
+                              }}
+                              className="w-4 h-4 text-liberia-blue focus:ring-liberia-blue border-gray-300 rounded"
+                            />
+                            <span className="text-sm">{team.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {selectedTeamsForGroup.length} team(s) selected
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={createManualGroup}
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition"
+                      >
+                        Create Group
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowManualGrouping(false)
+                          setManualGroupName('')
+                          setSelectedTeamsForGroup([])
+                        }}
+                        className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {groups.length === 0 && !showManualGrouping ? (
                 <div className="text-center text-gray-500 py-12">
                   <p className="text-lg mb-4">No groups created yet</p>
-                  <p className="text-sm">Add all teams first, then generate groups</p>
+                  <p className="text-sm">
+                    {cupTeams.length < cup.teams_per_group
+                      ? `Add at least ${cup.teams_per_group} teams to create groups`
+                      : 'Use Auto-Generate for random groups or Manual Group for custom grouping'}
+                  </p>
                 </div>
-              ) : (
+              ) : groups.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {groups.map(group => (
-                    <div key={group.id} className="border rounded-lg p-4">
-                      <h3 className="text-xl font-bold mb-3 text-liberia-blue">{group.group_name}</h3>
+                    <div key={group.id} className="border rounded-lg p-4 relative">
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-xl font-bold text-liberia-blue">{group.group_name}</h3>
+                        <button
+                          onClick={() => deleteGroup(group.id, group.group_name)}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          title="Delete group"
+                        >
+                          ✕
+                        </button>
+                      </div>
                       <div className="space-y-2">
-                        {group.teams.map(team => (
-                          <div key={team.id} className="text-sm">
-                            {team.name}
-                          </div>
-                        ))}
+                        {group.teams.length > 0 ? (
+                          group.teams.map(team => (
+                            <div key={team.id} className="text-sm flex items-center gap-2">
+                              {team.logo_url ? (
+                                <img src={team.logo_url} alt={team.name} className="w-6 h-6 object-contain" />
+                              ) : (
+                                <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs">
+                                  {team.name.substring(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              <span>{team.name}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">No teams assigned</p>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         )}
