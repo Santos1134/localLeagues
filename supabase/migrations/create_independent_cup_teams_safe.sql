@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS cup_players_registry (
   yellow_cards INTEGER DEFAULT 0,
   red_cards INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW') NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   UNIQUE(cup_team_id, jersey_number)
 );
 
