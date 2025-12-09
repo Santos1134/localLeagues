@@ -115,12 +115,12 @@ export default async function AdminDashboard() {
 
             {isSuperAdmin && (
               <Link
-                href="/admin/league-admins"
+                href="/admin/administrators"
                 className="p-6 bg-gradient-to-br from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-xl transition-all transform hover:scale-105"
               >
                 <div className="text-3xl mb-3">👥</div>
-                <div className="font-bold text-lg">League Admins</div>
-                <div className="text-sm text-purple-100 mt-1">Manage admin accounts</div>
+                <div className="font-bold text-lg">Administrators</div>
+                <div className="text-sm text-purple-100 mt-1">Manage league & cup admins</div>
               </Link>
             )}
 

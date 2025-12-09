@@ -9,11 +9,12 @@ interface Cup {
   id: string
   name: string
   description: string | null
-  league_id: string
   season: string | null
   total_teams: number
   teams_per_group: number
   status: 'draft' | 'group_stage' | 'knockout' | 'completed'
+  start_date: string | null
+  end_date: string | null
 }
 
 interface Team {
@@ -22,14 +23,33 @@ interface Team {
   division_id: string
 }
 
-interface CupTeam {
-  id: string
-  team_id: string
+interface CupTeam extends Team {
+  cup_team_id: string
   group_id: string | null
-  team: {
-    id: string
-    name: string
-  }
+  group_name: string | null
+  points: number
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  goals_for: number
+  goals_against: number
+  goal_difference: number
+}
+
+interface Player {
+  id: string
+  name: string
+  position: string | null
+}
+
+interface CupPlayer {
+  id: string
+  player_id: string
+  player_name: string
+  position: string | null
+  jersey_number: number | null
+  is_captain: boolean
 }
 
 interface Group {
@@ -39,28 +59,52 @@ interface Group {
   teams: CupTeam[]
 }
 
+interface Match {
+  id: string
+  home_team_id: string
+  away_team_id: string
+  home_team_name: string
+  away_team_name: string
+  match_date: string | null
+  venue: string | null
+  home_score: number | null
+  away_score: number | null
+  status: 'scheduled' | 'live' | 'completed' | 'postponed' | 'cancelled'
+  stage: 'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final'
+  group_id: string | null
+  group_name: string | null
+}
+
+type TabType = 'overview' | 'teams' | 'players' | 'groups' | 'fixtures' | 'knockout' | 'standings'
+
 export default function CupDetailsPage() {
   const params = useParams()
   const router = useRouter()
-  const cupId = params?.id as string
+  const cupId = params.id as string
+  const supabase = createClient()
 
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [cup, setCup] = useState<Cup | null>(null)
-  const [availableTeams, setAvailableTeams] = useState<Team[]>([])
   const [cupTeams, setCupTeams] = useState<CupTeam[]>([])
+  const [availableTeams, setAvailableTeams] = useState<Team[]>([])
   const [groups, setGroups] = useState<Group[]>([])
+  const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const [selectedTeams, setSelectedTeams] = useState<string[]>([])
-  const [searchQuery, setSearchQuery] = useState('')
+  // Team management
+  const [selectedTeamId, setSelectedTeamId] = useState('')
+  const [showAddTeam, setShowAddTeam] = useState(false)
 
-  const supabase = createClient()
+  // Player management
+  const [selectedTeamForPlayers, setSelectedTeamForPlayers] = useState('')
+  const [teamPlayers, setTeamPlayers] = useState<Player[]>([])
+  const [cupPlayers, setCupPlayers] = useState<CupPlayer[]>([])
+  const [showAddPlayers, setShowAddPlayers] = useState(false)
 
   useEffect(() => {
-    if (cupId) {
-      fetchCupData()
-    }
+    fetchCupData()
   }, [cupId])
 
   const fetchCupData = async () => {
@@ -76,29 +120,64 @@ export default function CupDetailsPage() {
     if (cupData) {
       setCup(cupData)
 
-      // Fetch available teams from ALL divisions (cups are independent)
+      // Fetch teams in this cup
       const { data: teamsData } = await supabase
-        .from('teams')
-        .select('id, name, division_id')
-        .order('name')
-
-      if (teamsData) {
-        setAvailableTeams(teamsData)
-      }
-
-      // Fetch cup teams
-      const { data: cupTeamsData } = await supabase
         .from('cup_teams')
         .select(`
           id,
+          cup_id,
           team_id,
           group_id,
-          team:teams(id, name)
+          points,
+          played,
+          won,
+          drawn,
+          lost,
+          goals_for,
+          goals_against,
+          goal_difference,
+          teams (
+            id,
+            name,
+            division_id
+          ),
+          cup_groups (
+            id,
+            group_name
+          )
         `)
         .eq('cup_id', cupId)
 
-      if (cupTeamsData) {
-        setCupTeams(cupTeamsData as any)
+      if (teamsData) {
+        const formattedTeams = teamsData.map((ct: any) => ({
+          cup_team_id: ct.id,
+          id: ct.teams.id,
+          name: ct.teams.name,
+          division_id: ct.teams.division_id,
+          group_id: ct.group_id,
+          group_name: ct.cup_groups?.group_name || null,
+          points: ct.points,
+          played: ct.played,
+          won: ct.won,
+          drawn: ct.drawn,
+          lost: ct.lost,
+          goals_for: ct.goals_for,
+          goals_against: ct.goals_against,
+          goal_difference: ct.goal_difference
+        }))
+        setCupTeams(formattedTeams)
+      }
+
+      // Fetch available teams (all teams not yet in this cup)
+      const cupTeamIds = teamsData?.map((ct: any) => ct.teams.id) || []
+      const { data: allTeams } = await supabase
+        .from('teams')
+        .select('id, name, division_id')
+        .not('id', 'in', `(${cupTeamIds.join(',') || '00000000-0000-0000-0000-000000000000'})`)
+        .order('name')
+
+      if (allTeams) {
+        setAvailableTeams(allTeams)
       }
 
       // Fetch groups
@@ -109,57 +188,73 @@ export default function CupDetailsPage() {
         .order('group_order')
 
       if (groupsData) {
-        // Organize teams by group
         const groupsWithTeams = groupsData.map(group => ({
           ...group,
-          teams: (cupTeamsData || []).filter((ct: any) => ct.group_id === group.id)
+          teams: formattedTeams.filter((t: CupTeam) => t.group_id === group.id)
         }))
         setGroups(groupsWithTeams)
+      }
+
+      // Fetch matches
+      const { data: matchesData } = await supabase
+        .from('cup_matches')
+        .select(`
+          *,
+          home_team:teams!cup_matches_home_team_id_fkey(id, name),
+          away_team:teams!cup_matches_away_team_id_fkey(id, name),
+          cup_groups(group_name)
+        `)
+        .eq('cup_id', cupId)
+        .order('match_date', { ascending: true })
+
+      if (matchesData) {
+        const formattedMatches = matchesData.map((m: any) => ({
+          id: m.id,
+          home_team_id: m.home_team_id,
+          away_team_id: m.away_team_id,
+          home_team_name: m.home_team.name,
+          away_team_name: m.away_team.name,
+          match_date: m.match_date,
+          venue: m.venue,
+          home_score: m.home_score,
+          away_score: m.away_score,
+          status: m.status,
+          stage: m.stage,
+          group_id: m.group_id,
+          group_name: m.cup_groups?.group_name || null
+        }))
+        setMatches(formattedMatches)
       }
     }
 
     setLoading(false)
   }
 
-  const addTeamsToCup = async () => {
-    if (selectedTeams.length === 0) {
-      setError('Please select at least one team')
+  const addTeamToCup = async () => {
+    if (!selectedTeamId) {
+      setError('Please select a team')
       return
     }
-
-    if (!cup) return
-
-    const currentCount = cupTeams.length
-    const newCount = currentCount + selectedTeams.length
-
-    if (newCount > cup.total_teams) {
-      setError(`Cannot add ${selectedTeams.length} teams. Maximum is ${cup.total_teams}, and you already have ${currentCount}.`)
-      return
-    }
-
-    setError('')
-
-    const teamsToInsert = selectedTeams.map(teamId => ({
-      cup_id: cupId,
-      team_id: teamId
-    }))
 
     const { error: insertError } = await supabase
       .from('cup_teams')
-      .insert(teamsToInsert)
+      .insert({
+        cup_id: cupId,
+        team_id: selectedTeamId
+      })
 
     if (insertError) {
       setError(insertError.message)
     } else {
-      setSuccess(`${selectedTeams.length} team(s) added successfully`)
-      setSelectedTeams([])
-      setSearchQuery('')
+      setSuccess('Team added successfully')
+      setSelectedTeamId('')
+      setShowAddTeam(false)
       fetchCupData()
     }
   }
 
-  const removeTeamFromCup = async (cupTeamId: string) => {
-    if (!confirm('Remove this team from the cup?')) return
+  const removeTeamFromCup = async (cupTeamId: string, teamName: string) => {
+    if (!confirm(`Remove ${teamName} from this cup?`)) return
 
     const { error: deleteError } = await supabase
       .from('cup_teams')
@@ -175,109 +270,136 @@ export default function CupDetailsPage() {
   }
 
   const generateGroups = async () => {
-    if (!cup) return
-
-    if (cupTeams.length !== cup.total_teams) {
-      setError(`Please add exactly ${cup.total_teams} teams before generating groups. Currently have ${cupTeams.length}.`)
+    if (cupTeams.length < cup!.total_teams) {
+      setError(`Please add all ${cup!.total_teams} teams before generating groups`)
       return
     }
 
-    if (!confirm(`This will create ${Math.ceil(cup.total_teams / cup.teams_per_group)} groups and randomly distribute teams. Continue?`)) {
-      return
-    }
+    if (!confirm('Generate groups? This will randomly assign teams to groups.')) return
 
-    setError('')
-
-    // Delete existing groups first
-    await supabase
-      .from('cup_groups')
-      .delete()
-      .eq('cup_id', cupId)
+    // Delete existing groups
+    await supabase.from('cup_groups').delete().eq('cup_id', cupId)
 
     // Calculate number of groups
-    const totalGroups = Math.ceil(cup.total_teams / cup.teams_per_group)
+    const numberOfGroups = Math.ceil(cupTeams.length / cup!.teams_per_group)
 
     // Create groups
-    const groupNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    const groupsToInsert = []
+    const groupNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    const createdGroups = []
 
-    for (let i = 0; i < totalGroups; i++) {
-      groupsToInsert.push({
-        cup_id: cupId,
-        group_name: `Group ${groupNames[i]}`,
-        group_order: i + 1
-      })
+    for (let i = 0; i < numberOfGroups; i++) {
+      const { data: newGroup } = await supabase
+        .from('cup_groups')
+        .insert({
+          cup_id: cupId,
+          group_name: `Group ${groupNames[i]}`,
+          group_order: i + 1
+        })
+        .select()
+        .single()
+
+      if (newGroup) createdGroups.push(newGroup)
     }
-
-    const { data: createdGroups, error: groupError } = await supabase
-      .from('cup_groups')
-      .insert(groupsToInsert)
-      .select()
-
-    if (groupError) {
-      setError(groupError.message)
-      return
-    }
-
-    if (!createdGroups) return
 
     // Shuffle teams randomly
-    const shuffledTeams = [...cupTeams].sort(() => Math.random() - 0.5)
+    const shuffled = [...cupTeams].sort(() => Math.random() - 0.5)
 
-    // Distribute teams to groups
-    for (let i = 0; i < shuffledTeams.length; i++) {
-      const groupIndex = i % totalGroups
-      const group = createdGroups[groupIndex]
-
+    // Assign teams to groups
+    for (let i = 0; i < shuffled.length; i++) {
+      const groupIndex = i % createdGroups.length
       await supabase
         .from('cup_teams')
-        .update({ group_id: group.id })
-        .eq('id', shuffledTeams[i].id)
+        .update({ group_id: createdGroups[groupIndex].id })
+        .eq('id', shuffled[i].cup_team_id)
     }
 
-    setSuccess('Groups generated and teams distributed successfully!')
+    setSuccess('Groups generated successfully!')
     fetchCupData()
   }
 
-  const toggleTeamSelection = (teamId: string) => {
-    if (selectedTeams.includes(teamId)) {
-      setSelectedTeams(selectedTeams.filter(id => id !== teamId))
+  const generateGroupFixtures = async () => {
+    if (groups.length === 0) {
+      setError('Please generate groups first')
+      return
+    }
+
+    if (!confirm('Generate fixtures for group stage? This will create round-robin matches for each group.')) return
+
+    // Delete existing group stage matches
+    await supabase
+      .from('cup_matches')
+      .delete()
+      .eq('cup_id', cupId)
+      .eq('stage', 'group')
+
+    // Generate round-robin fixtures for each group
+    for (const group of groups) {
+      const teams = group.teams
+
+      // Round-robin algorithm
+      for (let i = 0; i < teams.length; i++) {
+        for (let j = i + 1; j < teams.length; j++) {
+          await supabase
+            .from('cup_matches')
+            .insert({
+              cup_id: cupId,
+              group_id: group.id,
+              home_team_id: teams[i].id,
+              away_team_id: teams[j].id,
+              stage: 'group',
+              status: 'scheduled'
+            })
+        }
+      }
+    }
+
+    setSuccess('Group stage fixtures generated successfully!')
+    fetchCupData()
+  }
+
+  const updateCupStatus = async (newStatus: Cup['status']) => {
+    const { error: updateError } = await supabase
+      .from('cups')
+      .update({ status: newStatus })
+      .eq('id', cupId)
+
+    if (updateError) {
+      setError(updateError.message)
     } else {
-      setSelectedTeams([...selectedTeams, teamId])
+      setSuccess(`Cup status updated to ${newStatus}`)
+      fetchCupData()
     }
   }
 
-  const filteredAvailableTeams = availableTeams.filter(team =>
-    !cupTeams.some(ct => ct.team_id === team.id) &&
-    team.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-liberia-blue mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading cup details...</p>
-        </div>
-      </div>
-    )
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-xl">Loading...</div>
+    </div>
   }
 
   if (!cup) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-xl text-gray-600">Cup not found</p>
-          <button
-            onClick={() => router.push('/admin/cups')}
-            className="mt-4 text-liberia-blue hover:underline"
-          >
-            Back to Cups
-          </button>
-        </div>
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold mb-4">Cup Not Found</h2>
+        <button
+          onClick={() => router.push('/admin/cups')}
+          className="text-liberia-blue hover:underline"
+        >
+          Back to Cups
+        </button>
       </div>
-    )
+    </div>
   }
+
+  const tabs: { id: TabType; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'teams', label: `Teams (${cupTeams.length}/${cup.total_teams})` },
+    { id: 'players', label: 'Players' },
+    { id: 'groups', label: `Groups (${groups.length})` },
+    { id: 'fixtures', label: `Fixtures (${matches.filter(m => m.stage === 'group').length})` },
+    { id: 'knockout', label: 'Knockout' },
+    { id: 'standings', label: 'Standings' }
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -293,14 +415,58 @@ export default function CupDetailsPage() {
             </button>
             <LogoutButton />
           </div>
-          <h1 className="text-3xl font-bold mb-2">{cup.name}</h1>
-          <p className="text-blue-100">
-            {cup.season && `${cup.season} • `}
-            {cupTeams.length} / {cup.total_teams} teams
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">{cup.name}</h1>
+              <p className="text-blue-100">
+                {cup.season && `${cup.season} • `}
+                {cupTeams.length} / {cup.total_teams} teams • Status: {cup.status.replace('_', ' ')}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {cup.status === 'draft' && cupTeams.length === cup.total_teams && (
+                <button
+                  onClick={() => updateCupStatus('group_stage')}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold"
+                >
+                  Start Group Stage
+                </button>
+              )}
+              {cup.status === 'group_stage' && (
+                <button
+                  onClick={() => updateCupStatus('knockout')}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-semibold"
+                >
+                  Start Knockout Stage
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4">
+          <div className="flex space-x-1 overflow-x-auto">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-6 py-4 font-semibold whitespace-nowrap transition ${
+                  activeTab === tab.id
+                    ? 'border-b-4 border-liberia-red text-liberia-blue'
+                    : 'text-gray-600 hover:text-liberia-blue'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
       <div className="container mx-auto px-4 py-8">
         {/* Messages */}
         {error && (
@@ -315,172 +481,332 @@ export default function CupDetailsPage() {
           </div>
         )}
 
-        {/* Status Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-3xl font-bold text-liberia-blue mb-2">
-              {cupTeams.length} / {cup.total_teams}
-            </div>
-            <div className="text-gray-600">Teams Added</div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-3xl font-bold text-purple-600 mb-2">
-              {groups.length}
-            </div>
-            <div className="text-gray-600">Groups Created</div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-3xl font-bold text-green-600 mb-2">
-              {cup.teams_per_group}
-            </div>
-            <div className="text-gray-600">Teams per Group</div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-3xl font-bold text-yellow-600 mb-2">
-              {cup.status.replace('_', ' ').toUpperCase()}
-            </div>
-            <div className="text-gray-600">Status</div>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Add Teams Section */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold">Add Teams</h2>
-              {selectedTeams.length > 0 && (
-                <button
-                  onClick={addTeamsToCup}
-                  className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-4 rounded transition text-sm"
-                >
-                  Add {selectedTeams.length} Team{selectedTeams.length > 1 ? 's' : ''}
-                </button>
-              )}
-            </div>
-
-            <div className="p-6">
-              <div className="mb-4">
-                <input
-                  type="text"
-                  placeholder="Search teams..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-liberia-blue"
-                />
-              </div>
-
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {filteredAvailableTeams.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">
-                    {searchQuery ? 'No teams found' : 'All teams have been added'}
-                  </p>
-                ) : (
-                  filteredAvailableTeams.map(team => (
-                    <label
-                      key={team.id}
-                      className="flex items-center p-3 hover:bg-gray-50 rounded cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedTeams.includes(team.id)}
-                        onChange={() => toggleTeamSelection(team.id)}
-                        className="w-5 h-5 text-liberia-blue rounded focus:ring-liberia-blue"
-                      />
-                      <span className="ml-3 font-medium">{team.name}</span>
-                    </label>
-                  ))
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-bold mb-4">Cup Information</h2>
+              <div className="space-y-3">
+                <div>
+                  <span className="font-semibold">Name:</span> {cup.name}
+                </div>
+                {cup.description && (
+                  <div>
+                    <span className="font-semibold">Description:</span> {cup.description}
+                  </div>
                 )}
+                {cup.season && (
+                  <div>
+                    <span className="font-semibold">Season:</span> {cup.season}
+                  </div>
+                )}
+                <div>
+                  <span className="font-semibold">Total Teams:</span> {cup.total_teams}
+                </div>
+                <div>
+                  <span className="font-semibold">Teams per Group:</span> {cup.teams_per_group}
+                </div>
+                <div>
+                  <span className="font-semibold">Status:</span>{' '}
+                  <span className="px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800">
+                    {cup.status.replace('_', ' ')}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Current Teams Section */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold">Cup Teams ({cupTeams.length})</h2>
-              {cupTeams.length === cup.total_teams && groups.length === 0 && (
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-bold mb-4">Quick Actions</h2>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setActiveTab('teams')}
+                  className="w-full bg-liberia-blue hover:bg-liberia-blue-dark text-white font-bold py-3 px-4 rounded-lg transition text-left"
+                  disabled={cupTeams.length >= cup.total_teams}
+                >
+                  {cupTeams.length >= cup.total_teams ? '✓ All Teams Added' : '+ Add Teams'}
+                </button>
                 <button
                   onClick={generateGroups}
-                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition text-sm"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition text-left"
+                  disabled={cupTeams.length < cup.total_teams || groups.length > 0}
                 >
-                  Generate Groups
+                  {groups.length > 0 ? '✓ Groups Generated' : 'Generate Groups'}
                 </button>
-              )}
+                <button
+                  onClick={generateGroupFixtures}
+                  className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-lg transition text-left"
+                  disabled={groups.length === 0}
+                >
+                  Generate Group Fixtures
+                </button>
+                <button
+                  onClick={() => setActiveTab('fixtures')}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition text-left"
+                >
+                  View & Manage Fixtures
+                </button>
+              </div>
             </div>
+          </div>
+        )}
 
-            <div className="p-6">
-              {cupTeams.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
-                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <p>No teams added yet</p>
-                  <p className="text-sm mt-2">Select teams from the left to add them</p>
+        {/* Teams Tab */}
+        {activeTab === 'teams' && (
+          <div>
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold">Teams in Cup</h2>
+                {cupTeams.length < cup.total_teams && (
+                  <button
+                    onClick={() => setShowAddTeam(!showAddTeam)}
+                    className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-4 rounded-lg transition"
+                  >
+                    {showAddTeam ? 'Cancel' : '+ Add Team'}
+                  </button>
+                )}
+              </div>
+
+              {showAddTeam && (
+                <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                  <h3 className="font-semibold mb-3">Add Team to Cup</h3>
+                  <div className="flex gap-4">
+                    <select
+                      value={selectedTeamId}
+                      onChange={(e) => setSelectedTeamId(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Select a team...</option>
+                      {availableTeams.map(team => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={addTeamToCup}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {cupTeams.map((team) => (
+                  <div
+                    key={team.cup_team_id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                  >
+                    <div>
+                      <div className="font-semibold">{team.name}</div>
+                      {team.group_name && (
+                        <div className="text-sm text-gray-600">{team.group_name}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeTeamFromCup(team.cup_team_id, team.name)}
+                      className="text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Players Tab */}
+        {activeTab === 'players' && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4">Player Registration</h2>
+            <p className="text-gray-600 mb-6">Register players for each team in the cup competition</p>
+
+            <div className="text-center text-gray-500 py-12">
+              <p className="text-lg mb-4">Player registration feature coming soon...</p>
+              <p className="text-sm">Teams will be able to register specific players for cup matches</p>
+            </div>
+          </div>
+        )}
+
+        {/* Groups Tab */}
+        {activeTab === 'groups' && (
+          <div>
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold">Cup Groups</h2>
+                {cupTeams.length === cup.total_teams && groups.length === 0 && (
+                  <button
+                    onClick={generateGroups}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
+                  >
+                    Generate Groups
+                  </button>
+                )}
+              </div>
+
+              {groups.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <p className="text-lg mb-4">No groups created yet</p>
+                  <p className="text-sm">Add all teams first, then generate groups</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {cupTeams.map(cupTeam => (
-                    <div
-                      key={cupTeam.id}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50"
-                    >
-                      <div>
-                        <p className="font-medium">{cupTeam.team.name}</p>
-                        {cupTeam.group_id && (
-                          <p className="text-xs text-gray-500">
-                            {groups.find(g => g.id === cupTeam.group_id)?.group_name}
-                          </p>
-                        )}
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {groups.map(group => (
+                    <div key={group.id} className="border rounded-lg p-4">
+                      <h3 className="text-xl font-bold mb-3 text-liberia-blue">{group.group_name}</h3>
+                      <div className="space-y-2">
+                        {group.teams.map(team => (
+                          <div key={team.id} className="text-sm">
+                            {team.name}
+                          </div>
+                        ))}
                       </div>
-                      <button
-                        onClick={() => removeTeamFromCup(cupTeam.id)}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        Remove
-                      </button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Groups Display */}
-        {groups.length > 0 && (
-          <div className="mt-8">
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b">
-                <h2 className="text-xl font-bold">Groups</h2>
+        {/* Fixtures Tab */}
+        {activeTab === 'fixtures' && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Group Stage Fixtures</h2>
+              {groups.length > 0 && matches.filter(m => m.stage === 'group').length === 0 && (
+                <button
+                  onClick={generateGroupFixtures}
+                  className="bg-liberia-red hover:bg-liberia-blue text-white font-bold py-2 px-4 rounded-lg transition"
+                >
+                  Generate Fixtures
+                </button>
+              )}
+            </div>
+
+            {matches.filter(m => m.stage === 'group').length === 0 ? (
+              <div className="text-center text-gray-500 py-12">
+                <p className="text-lg mb-4">No fixtures generated yet</p>
+                <p className="text-sm">Generate groups first, then create fixtures</p>
               </div>
-
-              <div className="p-6">
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {groups.map(group => (
-                    <div key={group.id} className="border-2 border-liberia-blue rounded-lg p-4">
-                      <h3 className="text-lg font-bold text-liberia-blue mb-4">
-                        {group.group_name}
-                      </h3>
+            ) : (
+              <div className="space-y-6">
+                {groups.map(group => {
+                  const groupMatches = matches.filter(m => m.group_id === group.id)
+                  return (
+                    <div key={group.id}>
+                      <h3 className="text-xl font-bold mb-3 text-liberia-blue">{group.group_name}</h3>
                       <div className="space-y-2">
-                        {group.teams.length === 0 ? (
-                          <p className="text-sm text-gray-500">No teams assigned</p>
-                        ) : (
-                          group.teams.map((team, index) => (
-                            <div key={team.id} className="flex items-center">
-                              <span className="text-gray-500 w-6">{index + 1}.</span>
-                              <span className="font-medium">{team.team.name}</span>
+                        {groupMatches.map(match => (
+                          <div key={match.id} className="flex items-center justify-between p-3 border rounded hover:bg-gray-50">
+                            <div className="flex-1">
+                              <span className="font-semibold">{match.home_team_name}</span>
+                              {match.status === 'completed' && match.home_score !== null && (
+                                <span className="mx-2 text-liberia-red font-bold">
+                                  {match.home_score} - {match.away_score}
+                                </span>
+                              )}
+                              {match.status !== 'completed' && <span className="mx-2">vs</span>}
+                              <span className="font-semibold">{match.away_team_name}</span>
                             </div>
-                          ))
-                        )}
+                            <div className="flex items-center gap-3">
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                match.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                match.status === 'live' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {match.status}
+                              </span>
+                              <button
+                                onClick={() => router.push(`/admin/cups/${cupId}/matches/${match.id}`)}
+                                className="text-liberia-blue hover:underline text-sm"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Knockout Tab */}
+        {activeTab === 'knockout' && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4">Knockout Stage</h2>
+            <div className="text-center text-gray-500 py-12">
+              <p className="text-lg mb-4">Knockout stage feature coming soon...</p>
+              <p className="text-sm">Bracket generation and knockout matches will be available here</p>
             </div>
+          </div>
+        )}
+
+        {/* Standings Tab */}
+        {activeTab === 'standings' && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-6">Group Standings</h2>
+
+            {groups.length === 0 ? (
+              <div className="text-center text-gray-500 py-12">
+                <p className="text-lg mb-4">No standings available yet</p>
+                <p className="text-sm">Generate groups and play matches to see standings</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {groups.map(group => (
+                  <div key={group.id}>
+                    <h3 className="text-xl font-bold mb-3 text-liberia-blue">{group.group_name}</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Pos</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Team</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">P</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">W</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">D</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">L</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">GF</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">GA</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">GD</th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.teams
+                            .sort((a, b) => {
+                              if (b.points !== a.points) return b.points - a.points
+                              if (b.goal_difference !== a.goal_difference) return b.goal_difference - a.goal_difference
+                              return b.goals_for - a.goals_for
+                            })
+                            .map((team, index) => (
+                              <tr key={team.id} className="border-t hover:bg-gray-50">
+                                <td className="px-4 py-3 text-center font-semibold">{index + 1}</td>
+                                <td className="px-4 py-3 font-semibold">{team.name}</td>
+                                <td className="px-4 py-3 text-center">{team.played}</td>
+                                <td className="px-4 py-3 text-center">{team.won}</td>
+                                <td className="px-4 py-3 text-center">{team.drawn}</td>
+                                <td className="px-4 py-3 text-center">{team.lost}</td>
+                                <td className="px-4 py-3 text-center">{team.goals_for}</td>
+                                <td className="px-4 py-3 text-center">{team.goals_against}</td>
+                                <td className="px-4 py-3 text-center font-semibold">{team.goal_difference}</td>
+                                <td className="px-4 py-3 text-center font-bold text-liberia-blue">{team.points}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
