@@ -138,18 +138,21 @@ export default function AdministratorsPage() {
     }
 
     try {
-      // Step 1: Create auth user
+      // Step 1: Create auth user (with auto-confirm to bypass email verification)
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         options: {
+          data: {
+            full_name: formData.full_name.trim() || null,
+          },
           emailRedirectTo: undefined
         }
       })
 
       if (signUpError) {
         console.error('SignUp Error:', signUpError)
-        setError(`Signup failed: ${signUpError.message}`)
+        setError(`Signup failed: ${signUpError.message}. Note: Check if email confirmations are disabled in Supabase Auth settings.`)
         return
       }
 
@@ -158,7 +161,7 @@ export default function AdministratorsPage() {
         return
       }
 
-      console.log('User created:', authData.user.id)
+      console.log('User created:', authData.user.id, 'Email confirmed:', authData.user.email_confirmed_at)
 
       // Step 2: Wait for profile trigger
       await new Promise(resolve => setTimeout(resolve, 2000))
