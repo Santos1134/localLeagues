@@ -138,13 +138,31 @@ export default function AdministratorsPage() {
     }
 
     try {
-      // Call API route to create admin (uses service role to bypass RLS)
+      // Step 1: Sign up the user normally (this will send confirmation email on free tier)
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+      })
+
+      if (signUpError) {
+        console.error('SignUp Error:', signUpError)
+        setError(`Signup failed: ${signUpError.message}`)
+        return
+      }
+
+      if (!authData.user) {
+        setError('User creation failed - no user returned')
+        return
+      }
+
+      // Step 2: Call API route to update profile using service role (bypasses RLS)
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          user_id: authData.user.id,
           email: formData.email.trim().toLowerCase(),
           password: formData.password,
           full_name: formData.full_name.trim() || null,
@@ -158,12 +176,12 @@ export default function AdministratorsPage() {
 
       if (!response.ok) {
         console.error('API Error:', result)
-        setError(result.error || 'Failed to create admin')
+        setError(`Failed to set admin permissions: ${result.error}`)
         return
       }
 
       const managementType = formData.admin_type === 'league' ? 'league' : 'cup'
-      setSuccess(`${managementType} admin created successfully! Email: ${formData.email}`)
+      setSuccess(`${managementType} admin created! User will receive confirmation email at ${formData.email}`)
       resetForm()
       fetchAdmins()
     } catch (err: any) {
