@@ -25,10 +25,11 @@ export default function FixturesPage() {
   const fetchData = async () => {
     setLoading(true)
 
-    // Fetch leagues for filter dropdown
+    // Fetch leagues for filter dropdown (only active leagues)
     const { data: leaguesData } = await supabase
       .from('leagues')
       .select('id, name')
+      .eq('is_active', true)
       .order('name')
 
     // Fetch cups for filter dropdown
@@ -37,7 +38,7 @@ export default function FixturesPage() {
       .select('id, name')
       .order('name')
 
-    // Fetch league matches with team information
+    // Fetch league matches with team information (only from active leagues)
     const { data: leagueMatches } = await supabase
       .from('matches')
       .select(`
@@ -52,16 +53,18 @@ export default function FixturesPage() {
           name,
           logo_url
         ),
-        division:divisions (
+        division:divisions!inner (
           id,
           name,
           league_id,
-          league:leagues (
+          league:leagues!inner (
             id,
-            name
+            name,
+            is_active
           )
         )
       `)
+      .eq('division.league.is_active', true)
       .order('match_date', { ascending: true })
       .limit(100)
 

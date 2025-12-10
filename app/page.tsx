@@ -5,12 +5,12 @@ import { createClient } from '@/lib/supabase/server'
 export default async function Home() {
   const supabase = await createClient()
 
-  // Fetch real stats from database
+  // Fetch real stats from database (only active leagues and their data)
   const [leaguesResult, divisionsResult, teamsResult, playersResult] = await Promise.all([
-    supabase.from('leagues').select('id', { count: 'exact', head: true }),
-    supabase.from('divisions').select('id', { count: 'exact', head: true }),
-    supabase.from('teams').select('id', { count: 'exact', head: true }),
-    supabase.from('players').select('id', { count: 'exact', head: true }),
+    supabase.from('leagues').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('divisions').select('id, leagues!inner(is_active)', { count: 'exact', head: true }).eq('leagues.is_active', true),
+    supabase.from('teams').select('id, division:divisions!inner(league_id, leagues!inner(is_active))', { count: 'exact', head: true }).eq('division.leagues.is_active', true),
+    supabase.from('players').select('id, team:teams!inner(division:divisions!inner(league_id, leagues!inner(is_active)))', { count: 'exact', head: true }).eq('team.division.leagues.is_active', true),
   ])
 
   const stats = {

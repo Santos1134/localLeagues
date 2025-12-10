@@ -27,10 +27,11 @@ export default function StandingsPage() {
   const fetchData = async () => {
     setLoading(true)
 
-    // Fetch leagues for filter
+    // Fetch leagues for filter (only active leagues)
     const { data: leaguesData } = await supabase
       .from('leagues')
       .select('id, name')
+      .eq('is_active', true)
       .order('name')
 
     // Fetch cups for filter
@@ -39,18 +40,20 @@ export default function StandingsPage() {
       .select('id, name')
       .order('name')
 
-    // Fetch all divisions with league info
+    // Fetch all divisions with league info (only from active leagues)
     const { data: divisions } = await supabase
       .from('divisions')
       .select(`
         id,
         name,
         league_id,
-        leagues (
+        leagues!inner (
           id,
-          name
+          name,
+          is_active
         )
       `)
+      .eq('leagues.is_active', true)
       .order('name')
 
     // Fetch standings for each division with team logos
