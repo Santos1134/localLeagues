@@ -4,8 +4,8 @@ import Link from 'next/link'
 export default async function TeamsPage() {
   const supabase = await createClient()
 
-  // Fetch all teams with division and league information
-  const { data: teams } = await supabase
+  // Fetch league teams with division and league information
+  const { data: leagueTeams } = await supabase
     .from('teams')
     .select(`
       *,
@@ -20,6 +20,34 @@ export default async function TeamsPage() {
     `)
     .order('name')
 
+  // Fetch cup teams
+  const { data: cupTeams } = await supabase
+    .from('cup_teams_registry')
+    .select(`
+      *,
+      cup:cups (
+        id,
+        name
+      )
+    `)
+    .order('name')
+
+  // Combine and format both types of teams
+  const allTeams = [
+    ...(leagueTeams || []).map(team => ({
+      ...team,
+      type: 'league' as const,
+      competitionName: team.division?.league?.name || 'Unknown League',
+      competitionType: team.division?.name || 'Unknown Division'
+    })),
+    ...(cupTeams || []).map(team => ({
+      ...team,
+      type: 'cup' as const,
+      competitionName: team.cup?.name || 'Unknown Cup',
+      competitionType: 'Cup Competition'
+    }))
+  ].sort((a, b) => a.name.localeCompare(b.name))
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -31,9 +59,9 @@ export default async function TeamsPage() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {teams && teams.length > 0 ? (
+        {allTeams && allTeams.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {teams.map((team) => (
+            {allTeams.map((team) => (
               <Link
                 key={team.id}
                 href={`/teams/${team.id}`}
@@ -64,15 +92,13 @@ export default async function TeamsPage() {
 
                 {/* Team Info */}
                 <div className="space-y-2 text-sm">
-                  {team.division && (
-                    <div className="flex items-center text-gray-600">
-                      <span className="mr-2">📊</span>
-                      <span>
-                        {team.division.name}
-                        {team.division.league && ` - ${(team.division.league as any).name}`}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center text-gray-600">
+                    <span className="mr-2">{team.type === 'cup' ? '🏆' : '📊'}</span>
+                    <span>
+                      {team.competitionName}
+                      {team.type === 'league' && ` - ${team.competitionType}`}
+                    </span>
+                  </div>
                   {team.home_city && (
                     <div className="flex items-center text-gray-600">
                       <span className="mr-2">📍</span>
