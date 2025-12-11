@@ -40,21 +40,7 @@ export default async function Home() {
     supabase.from('players').select('id', { count: 'exact', head: true }),
   ])
 
-  // Debug: Log the actual counts
-  console.log('Database Counts:', {
-    leagues: leaguesResult.count,
-    divisions: divisionsResult.count,
-    leagueTeams: leagueTeamsResult.count,
-    cupTeams: cupTeamsResult.count,
-    players: playersResult.count,
-    errors: {
-      leaguesError: leaguesResult.error,
-      divisionsError: divisionsResult.error,
-      leagueTeamsError: leagueTeamsResult.error,
-      cupTeamsError: cupTeamsResult.error,
-      playersError: playersResult.error,
-    }
-  })
+  // Calculate stats from database queries
 
   const stats = {
     leagues: leaguesResult.count || 0,
