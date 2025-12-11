@@ -14,9 +14,9 @@ export default async function Home() {
       start_date,
       end_date,
       status,
-      cup_teams (
+      cup_teams_registry (
         id,
-        team_name
+        name
       )
     `)
     .eq('status', 'active')
@@ -36,7 +36,7 @@ export default async function Home() {
     // Count teams from leagues/divisions
     supabase.from('teams').select('id', { count: 'exact', head: true }),
     // Count teams from cups
-    supabase.from('cup_teams').select('id', { count: 'exact', head: true }),
+    supabase.from('cup_teams_registry').select('id', { count: 'exact', head: true }),
     supabase.from('players').select('id', { count: 'exact', head: true }),
   ])
 
@@ -134,7 +134,7 @@ export default async function Home() {
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
-                      {cup.cup_teams?.length || 0} Teams
+                      {cup.cup_teams_registry?.length || 0} Teams
                     </div>
                   </Link>
                 ))}
